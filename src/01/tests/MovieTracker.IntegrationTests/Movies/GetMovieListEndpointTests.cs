@@ -9,6 +9,22 @@ namespace MovieTracker.IntegrationTests.Movies;
 public sealed class GetMovieListEndpointTests : BaseIntegrationTest
 {
     [Test]
+    public async Task GetMovie_ReturnsTheSameDataAsTheCatalogue()
+    {
+        var catalogue = await Client.GetFromJsonAsync<GetMovieListResponse>("/api/movies?pageSize=1");
+        var expected = catalogue!.Items.Single();
+        var movie = await Client.GetFromJsonAsync<MovieListItemResponse>($"/api/movies/{expected.Id}");
+        Assert.That(movie, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public async Task GetMovie_WithUnknownId_ReturnsNotFound()
+    {
+        var response = await Client.GetAsync($"/api/movies/{Guid.Empty}");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
     public async Task GetMovies_ReturnsARequestedPageFromTheInMemoryCatalogue()
     {
         var response = await Client.GetAsync("/api/movies?page=1&pageSize=3");

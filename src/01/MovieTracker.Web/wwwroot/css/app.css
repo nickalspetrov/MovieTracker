@@ -155,3 +155,13 @@ footer { padding:25px; color:#7c8582; text-align:center; border-top:1px solid va
   .metric-grid { grid-template-columns:1fr; } .bar-row { grid-template-columns:100px 1fr 22px; }
   .form-columns { grid-template-columns:1fr; } .auth-card { padding:30px 20px; }
 }
+
+.movie-form-section { max-width:760px; padding-block:40px 70px; }
+.movie-form fieldset { display:grid; gap:10px; margin:0; padding:0; border:0; }
+.movie-form label { margin-top:12px; font-weight:700; }
+.movie-form input, .movie-form textarea, .movie-form select { width:100%; padding:12px; color:var(--ink); background:white; border:1px solid #cbd0cc; border-radius:4px; font:inherit; }
+.movie-form textarea { resize:vertical; }
+.movie-form .details-actions { margin-top:20px; }
+.validation-message, .validation-errors { color:#a32323; }
+.movie-form .invalid { border-color:#a32323; }
+button:disabled { opacity:.6; cursor:wait; }

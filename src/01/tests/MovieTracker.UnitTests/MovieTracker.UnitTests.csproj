@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\MovieTracker.Domain\MovieTracker.Domain.csproj" />
     <ProjectReference Include="..\..\MovieTracker.Application\MovieTracker.Application.csproj" />
+    <ProjectReference Include="..\..\MovieTracker.Infrastructure\MovieTracker.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

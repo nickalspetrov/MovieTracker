@@ -1,5 +1,6 @@
-﻿@page "/"
+@page "/"
 
+@inject MovieApiClient MovieApiClient
 <PageTitle>Home</PageTitle>
 
 <section class="hero page-section">
@@ -9,7 +10,7 @@
         <p>Discover movies, keep a watchlist, and turn everything you watch into a collection that is uniquely yours.</p>
         <div class="hero-actions">
             <NavLink class="button" href="movies">Browse movies</NavLink>
-            <NavLink class="text-link" href="watchlist">Open my watchlist →</NavLink>
+            <NavLink class="text-link" href="watchlist">Open my watchlist ></NavLink>
         </div>
     </div>
     <div class="hero-panel" aria-label="Demo viewing summary">
@@ -21,13 +22,17 @@
 </section>
 
 <section class="page-section">
-    <div class="section-heading"><div><span class="eyebrow">PICK UP WHERE YOU LEFT OFF</span><h2>Continue watching</h2></div><NavLink href="watchlist">View watchlist →</NavLink></div>
+    <div class="section-heading"><div><span class="eyebrow">EXPLORE THE CATALOGUE</span><h2>Discover movies</h2></div><NavLink href="watchlist">View watchlist ></NavLink></div>
+    @if (loadFailed)
+    {
+        <p role="alert">The movie service is unavailable. <a href="movies">Open the catalogue to try again.</a></p>
+    }
     <div class="preview-row">
-        @foreach (var movie in DemoData.Movies.Take(3))
+        @foreach (var movie in movies)
         {
             <NavLink class="preview-card" href="@($"movies/{movie.Id}")">
-                <img src="@movie.PosterPath" alt="" />
-                <span><b>@movie.Title</b><small>@movie.Year · @movie.Genre</small></span>
+                <img src="@movie.PosterUrl" alt="" />
+                <span><b>@movie.Title</b><small>@movie.ReleaseYear � @movie.Genre</small></span>
             </NavLink>
         }
     </div>
@@ -41,5 +46,11 @@
 </section>
 
 @code {
-    // TODO(Student Exercise 5): Replace this demo dashboard with personalized backend data.
+    private IReadOnlyList<MovieListItemModel> movies = [];
+    private bool loadFailed;
+    protected override async Task OnInitializedAsync()
+    {
+        try { movies = (await MovieApiClient.GetMoviesAsync(pageSize: 3)).Items; }
+        catch (Exception) { loadFailed = true; }
+    }
 }

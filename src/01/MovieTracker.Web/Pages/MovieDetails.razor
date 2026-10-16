@@ -1,58 +1,96 @@
 @page "/movies/{Id:guid}"
+@inject MovieApiClient MovieApiClient
+@inject NavigationManager Navigation
 
 <PageTitle>@(movie?.Title ?? "Movie details")</PageTitle>
 
-@if (movie is null)
+@if (isLoading)
 {
-    <section class="state-panel"><h1>Demo details unavailable</h1><p>This starter includes local details for a few seeded movie IDs.</p><NavLink class="button" href="movies">Back to movies</NavLink></section>
+    <section class="state-panel"><h1>Loading movie...</h1></section>
+}
+else if (errorMessage is not null)
+{
+    <section class="state-panel error-panel" role="alert"><h1>We couldn't load this movie</h1><p>@errorMessage</p><button class="button" @onclick="LoadMovieAsync">Try again</button></section>
+}
+else if (movie is null)
+{
+    <section class="state-panel"><h1>Movie not found</h1><p>This movie is no longer available.</p><NavLink class="button" href="movies">Back to movies</NavLink></section>
 }
 else
 {
     <section class="details-hero page-section">
-        <img src="@movie.PosterPath" alt="Abstract poster for @movie.Title" />
+        <img src="@movie.PosterUrl" alt="Abstract poster for @movie.Title" />
         <div>
-            <DemoFeatureNotice />
-            <span class="genre-badge">@movie.Genre</span>
+            <span class="genre-badge">@(movie.Genre == "ScienceFiction" ? "Science Fiction" : movie.Genre)</span>
             <h1>@movie.Title</h1>
-            <p class="details-meta">@movie.Year · @movie.DurationMinutes min · <b>★ @movie.Rating.ToString("0.0")</b></p>
+            <p class="details-meta">@movie.ReleaseYear</p>
             <p class="details-description">@movie.Description</p>
-            <div class="details-actions">
-                <button class="button" @onclick="ToggleWatchlist">@(inWatchlist ? "✓ In watchlist" : "+ Add to watchlist")</button>
-                @if (demoMessage is not null) { <span class="success-message">@demoMessage</span> }
-            </div>
-            <div class="rate-box">
-                <span>Your rating</span>
-                @foreach (var score in Enumerable.Range(1, 10))
-                {
-                    var capturedScore = score;
-                    <button class="rate-button @(userRating == score ? "selected" : null)" @onclick="() => Rate(capturedScore)">@score</button>
-                }
-            </div>
-        </div>
-    </section>
-    <section class="page-section reviews-section">
-        <div class="section-heading"><div><span class="eyebrow">COMMUNITY NOTES</span><h2>Demo reviews</h2></div></div>
-        <div class="review-grid">
-            <article><b>Maya K. <span>★ 9.0</span></b><p>Beautifully paced and even better on a second viewing.</p></article>
-            <article><b>Alex R. <span>★ 8.5</span></b><p>A memorable film with images that stay with you.</p></article>
+            <NavLink class="button" href="movies">Back to movies</NavLink>
+            <NavLink class="button" href="@($"movies/{movie.Id}/edit")">Edit movie</NavLink>
+            @if (!confirmDelete)
+            {
+                <button class="button" @onclick="() => confirmDelete = true">Delete movie</button>
+            }
+            else
+            {
+                <div role="group" aria-label="Confirm deletion">
+                    <p>Delete @movie.Title? This cannot be undone.</p>
+                    <button class="button" disabled="@isDeleting" @onclick="DeleteAsync">@(isDeleting ? "Deleting..." : "Confirm delete")</button>
+                    <button class="quiet-button" disabled="@isDeleting" @onclick="() => confirmDelete = false">Cancel</button>
+                </div>
+            }
+            @if (deleteError is not null) { <p role="alert" class="form-message">@deleteError</p> }
         </div>
     </section>
 }
 
 @code {
-    [Parameter] 
-    public Guid Id { get; set; }
-    private DemoMovie? movie;
-    private bool inWatchlist;
-    private int? userRating;
-    private string? demoMessage;
+    [Parameter] public Guid Id { get; set; }
+    private MovieListItemModel? movie;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private int loadVersion;
+    private bool confirmDelete;
+    private bool isDeleting;
+    private string? deleteError;
 
-    protected override void OnParametersSet()
+    private async Task DeleteAsync()
     {
-        // TODO(Student Exercise 2): Replace hardcoded movie details with GET /api/movies/{id}.
-        movie = DemoData.Movies.FirstOrDefault(item => item.Id == Id);
+        if (isDeleting) return;
+        isDeleting = true;
+        deleteError = null;
+        try
+        {
+            await MovieApiClient.DeleteMovieAsync(Id);
+            Navigation.NavigateTo("/movies");
+        }
+        catch (MovieApiException exception) { deleteError = exception.Message; }
+        catch (Exception) { deleteError = "The movie service is unavailable. Please try again."; }
+        finally { isDeleting = false; }
     }
 
-    private void ToggleWatchlist() { inWatchlist = !inWatchlist; demoMessage = "Saved locally for this demo session."; }
-    private void Rate(int score) { userRating = score; demoMessage = $"Demo rating set to {score}/10."; }
+    protected override Task OnParametersSetAsync() => LoadMovieAsync();
+
+    private async Task LoadMovieAsync()
+    {
+        var version = ++loadVersion;
+        confirmDelete = false;
+        deleteError = null;
+        isLoading = true;
+        errorMessage = null;
+        movie = null;
+        try
+        {
+            var result = await MovieApiClient.GetMovieAsync(Id);
+            if (version == loadVersion) movie = result;
+        }
+        catch (Exception)
+        {
+            if (version == loadVersion) errorMessage = "The movie service is unavailable. Please try again.";
+        }
+        finally
+        {
+            if (version == loadVersion) isLoading = false;
+        }
+    }
 }

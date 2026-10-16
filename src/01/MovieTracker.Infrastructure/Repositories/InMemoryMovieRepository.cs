@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using MovieTracker.Application.Common.Repositories;
 using MovieTracker.Domain.Movies;
 
@@ -19,6 +20,35 @@ public sealed class InMemoryMovieRepository : IMovieRepository
         CreateMovie("00000000-0000-0000-0000-000000000010", "The Grand Budapest Hotel", "A devoted concierge and his lobby boy are swept into a comic mystery.", MovieGenre.Comedy, 2014, "/images/posters/grand-budapest.svg")
     ];
 
+    private readonly ConcurrentDictionary<Guid, Movie> movies = new(
+        Movies.Select(movie => new KeyValuePair<Guid, Movie>(movie.Id, movie)));
+
+    public Task<bool> AddAsync(Movie movie, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(movie);
+        return Task.FromResult(movies.TryAdd(movie.Id, movie));
+    }
+
+    public Task<bool> UpdateAsync(Movie movie, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(movie);
+        while (movies.TryGetValue(movie.Id, out var existing))
+        {
+            if (movies.TryUpdate(movie.Id, movie, existing))
+                return Task.FromResult(true);
+        }
+
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(movies.TryRemove(id, out _));
+    }
+
     private static Movie CreateMovie(
         string id,
         string title,
@@ -28,10 +58,17 @@ public sealed class InMemoryMovieRepository : IMovieRepository
         string posterUrl) =>
         Movie.Create(Guid.Parse(id), title, description, genre, releaseYear, posterUrl).Value!;
 
+    public Task<Movie?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        movies.TryGetValue(id, out var movie);
+        return Task.FromResult(movie);
+    }
+
     public Task<int> CountAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Movies.Count);
+        return Task.FromResult(movies.Count);
     }
 
     public Task<IReadOnlyList<Movie>> GetPagedAsync(
@@ -41,12 +78,12 @@ public sealed class InMemoryMovieRepository : IMovieRepository
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        IReadOnlyList<Movie> movies = Movies
+        IReadOnlyList<Movie> page = movies.Values
             .OrderBy(movie => movie.Title, StringComparer.OrdinalIgnoreCase)
             .Skip(skip)
             .Take(take)
             .ToArray();
 
-        return Task.FromResult(movies);
+        return Task.FromResult(page);
     }
 }

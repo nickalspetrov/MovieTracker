@@ -1,0 +1,147 @@
+@page "/movies/create"
+@page "/movies/{Id:guid}/edit"
+@implements IDisposable
+@inject MovieApiClient MovieApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>@(Id.HasValue ? "Edit movie" : "Create movie")</PageTitle>
+
+<section class="page-section movie-form-section">
+    <h1>@(Id.HasValue ? "Edit movie" : "Create movie")</h1>
+    @if (isLoading)
+    {
+        <p role="status">Loading movie...</p>
+    }
+    else if (!canEdit)
+    {
+        <p role="alert">@errorMessage</p>
+        <button class="button" @onclick="LoadAsync">Try again</button>
+        <NavLink href="movies">Back to movies</NavLink>
+    }
+    else
+    {
+        <EditForm EditContext="editContext" OnValidSubmit="SaveAsync" class="movie-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            @if (errorMessage is not null) { <p class="form-message" role="alert">@errorMessage</p> }
+            <fieldset disabled="@isSaving">
+                <label for="movie-title">Title</label>
+                <InputText id="movie-title" @bind-Value="model.Title" />
+                <ValidationMessage For="() => model.Title" />
+                <label for="movie-description">Description</label>
+                <InputTextArea id="movie-description" @bind-Value="model.Description" rows="5" />
+                <ValidationMessage For="() => model.Description" />
+                <label for="movie-genre">Genre</label>
+                <InputSelect id="movie-genre" @bind-Value="model.Genre">
+                    @foreach (var genre in MovieFormModel.Genres)
+                    {
+                        <option value="@genre">@(genre == "ScienceFiction" ? "Science Fiction" : genre)</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => model.Genre" />
+                <label for="movie-year">Release year</label>
+                <InputNumber id="movie-year" @bind-Value="model.ReleaseYear" />
+                <ValidationMessage For="() => model.ReleaseYear" />
+                <label for="movie-poster">Poster URL</label>
+                <InputText id="movie-poster" @bind-Value="model.PosterUrl" />
+                <ValidationMessage For="() => model.PosterUrl" />
+                <div class="details-actions">
+                    <button class="button" type="submit">@(isSaving ? "Saving..." : "Save movie")</button>
+                    <NavLink href="@(Id.HasValue ? $"movies/{Id}" : "movies")">Cancel</NavLink>
+                </div>
+            </fieldset>
+        </EditForm>
+    }
+</section>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private MovieFormModel model = new();
+    private EditContext editContext = null!;
+    private ValidationMessageStore serverErrors = null!;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool canEdit;
+    private string? errorMessage;
+    private CancellationTokenSource? loadCancellation;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (!parameters.TryGetValue<Guid?>(nameof(Id), out _)) Id = null;
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loadCancellation?.Cancel();
+        loadCancellation?.Dispose();
+        var cancellation = loadCancellation = new CancellationTokenSource();
+        isLoading = true;
+        canEdit = false;
+        errorMessage = null;
+        try
+        {
+            var next = new MovieFormModel();
+            if (Id.HasValue)
+            {
+                var movie = await MovieApiClient.GetMovieAsync(Id.Value, cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                if (movie is null) { errorMessage = "Movie not found."; return; }
+                next = new MovieFormModel { Title = movie.Title, Description = movie.Description,
+                    Genre = movie.Genre, ReleaseYear = movie.ReleaseYear, PosterUrl = movie.PosterUrl };
+            }
+            if (editContext is not null) editContext.OnFieldChanged -= ClearServerErrors;
+            model = next;
+            editContext = new EditContext(model);
+            serverErrors = new ValidationMessageStore(editContext);
+            editContext.OnFieldChanged += ClearServerErrors;
+            canEdit = true;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception) { if (!cancellation.IsCancellationRequested) errorMessage = "The movie service is unavailable. Please try again."; }
+        finally { if (!cancellation.IsCancellationRequested) isLoading = false; }
+    }
+
+    private void ClearServerErrors(object? sender, FieldChangedEventArgs args)
+    {
+        serverErrors.Clear();
+        errorMessage = null;
+        editContext.NotifyValidationStateChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (isSaving) return;
+        isSaving = true;
+        errorMessage = null;
+        serverErrors.Clear();
+        var cancellationToken = loadCancellation!.Token;
+        try
+        {
+            var movie = Id.HasValue
+                ? await MovieApiClient.UpdateMovieAsync(Id.Value, model, cancellationToken)
+                : await MovieApiClient.CreateMovieAsync(model, cancellationToken);
+            if (cancellationToken.IsCancellationRequested) return;
+            Navigation.NavigateTo($"/movies/{movie.Id}");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (MovieApiException exception)
+        {
+            errorMessage = exception.Message;
+            foreach (var field in exception.Errors)
+                serverErrors.Add(new FieldIdentifier(model, field.Key), field.Value);
+            editContext.NotifyValidationStateChanged();
+        }
+        catch (Exception) { errorMessage = "The movie service is unavailable. Please try again."; }
+        finally { isSaving = false; }
+    }
+
+    public void Dispose()
+    {
+        loadCancellation?.Cancel();
+        loadCancellation?.Dispose();
+        if (editContext is not null) editContext.OnFieldChanged -= ClearServerErrors;
+    }
+}

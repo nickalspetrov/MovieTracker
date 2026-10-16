@@ -8,7 +8,18 @@ public sealed class MockMovieRepository(
     IReadOnlyList<Movie> movies) : IMovieRepository
 {
     public int RequestedSkip { get; private set; }
+    public Task<Movie?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(movies.FirstOrDefault(movie => movie.Id == id));
     public int RequestedTake { get; private set; }
+
+    public Task<bool> AddAsync(Movie movie, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This mock only supports read operations.");
+
+    public Task<bool> UpdateAsync(Movie movie, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This mock only supports read operations.");
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This mock only supports read operations.");
 
     public Task<int> CountAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(totalCount);
